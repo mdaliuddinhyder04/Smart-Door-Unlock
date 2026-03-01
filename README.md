@@ -13,12 +13,6 @@ authentication, Real-time communication, Time-bound access code, Snapshot verifi
 history logging.
 
 
-Here is your **visually styled, professional GitHub README** with badges, banner style header, clean formatting, and recruiter-attractive structure.
-
-You can **directly copy-paste this into README.md**.
-
----
-
 # 🔐 Smart Door Unlock System
 
 <p align="center">
